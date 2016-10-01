@@ -1,0 +1,357 @@
+---
+title: "GENCODE & Ensembl TSS Region Processing"
+author: "Stephen Kelly"
+date: "9/27/2016"
+output: 
+  html_document: 
+    keep_md: yes
+citation_package: natbib
+bibliography: references.bib
+biblio-style: apsr
+
+---
+
+```{r setup, include=FALSE}
+#     code_folding: show
+#     toc: false
+#     toc_float: true
+#     number_sections: true
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview
+
+For our ChIP-Seq analysis, we created a set of reference genomic regions from the Gencode [@GENCODE] and Ensembl [@ensembl] databases. 
+
+The following reference genome assemblies were used:
+
+- [GENCODE GRCh37.p13 release 19](https://www.gencodegenes.org/releases/19.html) 
+- [Ensembl GRCh37.p13 release 82](http://grch37.ensembl.org/Homo_sapiens/Info/Index)
+
+
+The following software was used:
+
+- [BEDOPS](http://bedops.readthedocs.io/en/latest/index.html) version 2.4.16 [@BEDOPS]
+- GenomicTools version 3.0.0 [@GenomicTools]
+- [BEDtools](http://bedtools.readthedocs.io/en/latest/) version 2.22.0 [@bedtools]
+- [HOMER](http://homer.salk.edu/homer/index.html) version 4.6 [@HOMER]
+
+# Find GENCODE TSS Regions
+
+First, we need to download and install BEDOPS.
+
+```{r dl_bedops, engine='bash', eval=FALSE}
+# downlaod the BEDOPS software
+cd ~/software/bin
+wget "https://github.com/bedops/bedops/releases/download/v2.4.16/bedops_linux_x86_64-v2.4.16.tar.bz2"
+tar jxvf bedops_linux_x86_64-vx.y.z.tar.bz2
+PATH=$PATH:~/software/bin
+```
+
+Next we will load the other required software packages and set some environment variables for reference. We will also need a text file with the sizes of each chromosome in our reference genome (hg19). We will use a regions size of 10000 base pairs from the TSS. 
+
+```{r, engine='bash', eval=FALSE}
+# load some programs to be used; this updates the PATH with the corresponding entries
+module load homer/v4.6
+module unload gcc
+module load bedtools/2.22.0
+
+# size of the TSS regions to use
+region_size="10000"
+
+# make the directory for the GENCODE data
+data_dir="./data/Gencode"
+mkdir -p "$data_dir"
+cd "$data_dir"
+
+# get the chrom sizes file and copy it here
+chrom_file="/ifs/home/kellys04/projects/Bioinformatics/data/hg19_chrom.sizes.txt"
+cp "$chrom_file" . 
+
+# file prefix
+gen_file="gencode.v19.annotation"
+```
+
+The GENCODE reference data set will be downloaded. 
+
+```{r, engine='bash', eval=FALSE}
+# Download source data ; http://www.gencodegenes.org/releases/19.html
+[ ! -f ${gen_file}.gtf.gz ] && wget "ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz"
+
+```
+
+The GENCODE data is in GTF format; it will first be converted to BED format with BEDOPS. Then, GenomicTools will be used to obtain locations of the TSS regions. HOMER will be used to remove overlapping peaks and collapse the peak set. 
+
+```{r, engine='bash', eval=FALSE}
+# convert the GTF to BED witht he BEDOPS converter
+[ ! -f ${gen_file}.bed ] && zcat ${gen_file}.gtf.gz | convert2bed --input=gtf - > ${gen_file}.bed
+
+# use gtools to get the TSS regions
+# VERSION: genomic-tools 3.0.0
+[ ! -f ${gen_file}.tss.bed ] && cat ${gen_file}.bed | genomic_regions connect | genomic_regions pos -op 5p > ${gen_file}.tss.bed
+
+# collapse the peaks with HOMER, preserve strand specific peaks
+[ ! -f ${gen_file}.tss_collapse.txt ] && mergePeaks ${gen_file}.tss.bed -strand > ${gen_file}.tss_collapse.txt
+[ ! -f ${gen_file}.tss_collapse.bed ] && pos2bed.pl ${gen_file}.tss_collapse.txt > ${gen_file}.tss_collapse.bed && rm -f ${gen_file}.tss_collapse.txt
+
+# create 10,000kbp TSS regions with bedtools
+if [ ! -f ${gen_file}.tss_collapse_${region_size}.bed ]; then
+  cat ${gen_file}.tss_collapse.bed | bedtools slop -g "$(basename $chrom_file)" -b "$region_size" > ${gen_file}.tss_collapse_${region_size}.bed
+fi
+
+# collapse the new peak overlaps created by extending the regions
+[ ! -f Gencode_TSS.txt ] && mergePeaks ${gen_file}.tss_collapse_${region_size}.bed > Gencode_TSS.txt
+[ ! -f Gencode_TSS.bed ] && pos2bed.pl Gencode_TSS.txt > Gencode_TSS.bed && rm -f Gencode_TSS.txt
+
+```
+
+Check the number of peaks
+
+```{r, engine='bash', eval=TRUE}
+gencode_bed="data/Gencode/Gencode_TSS.bed"
+wc -l $gencode_bed
+```
+
+
+# Find Ensembl TSS Regions
+
+We can now repeat the same procedure with the Ensembl data set. We are starting a new session, so environment parameters need to be set again.
+
+```{r, engine='bash', eval=FALSE}
+# load some programs to be used; this updates the PATH with the corresponding entries
+module load homer/v4.6
+module unload gcc
+module load bedtools/2.22.0
+
+# size of the TSS regions to use
+region_size="10000"
+
+data_dir="./data/Ensembl"
+mkdir -p "$data_dir"
+cd "$data_dir"
+
+# get the chrom sizes file and copy it here
+chrom_file="/ifs/home/kellys04/projects/Bioinformatics/data/hg19_chrom.sizes.txt"
+cp "$chrom_file" . 
+```
+
+Next we will download the Ensembl data set. Since it is in GTF format, it will need to be converted to BED format. Then we will use the same procedure as before to find the TSS regions and collapse duplicate peaks. 
+
+```{r, engine='bash', eval=FALSE}
+# file prefix
+ens_file="genes.ensembl.GRCh37.82"
+# download source data
+if [ ! -f ${ens_file}.gtf.gz ]; then
+  wget "ftp://ftp.ensembl.org/pub/grch37/release-84/gtf/homo_sapiens/Homo_sapiens.GRCh37.82.gtf.gz" -O ${ens_file}.gtf.gz
+fi
+
+# GTF processing
+# Need to filter out the GL, MT entries, need to add 'chr' to the start of each 1st entry
+if [ ! -f ${ens_file}_noGLMT.gtf ]; then
+  zcat ${ens_file}.gtf.gz | grep -Ev "^#|^GL|^M" > ${ens_file}_noGLMT.gtf
+  # cat ${ens_file}_noGLMT.gtf | awk '{ OFS="\t"; $1 = "chr"$1; print }' > ${ens_file}_noGLMT_chr.gtf # this don't work?? 
+  cat ${ens_file}_noGLMT.gtf | sed 's/^/chr/' > ${ens_file}_noGLMT_chr.gtf
+  
+fi
+
+# convert to BED 
+if [ ! -f ${ens_file}_noGLMT_chr.bed ]; then
+  # cat ${ens_file}_noGLMT_chr.gtf | convert2bed --input=gtf - > ${ens_file}_noGLMT_chr.bed
+  gtf2bed < ${ens_file}_noGLMT_chr.gtf > ${ens_file}_noGLMT_chr.bed
+fi
+
+# get the TSS regions
+if [ ! -f ${ens_file}_noGLMT_chr.tss.bed ]; then
+  cat ${ens_file}_noGLMT_chr.bed | genomic_regions connect | genomic_regions pos -op 5p > ${ens_file}_noGLMT_chr.tss.bed
+fi
+
+# collapse the regions
+ if [ ! -f ${ens_file}_noGLMT_chr.tss_collapse.bed ]; then
+  mergePeaks ${ens_file}_noGLMT_chr.tss.bed -strand > ${ens_file}_noGLMT_chr.tss_collapse.txt
+  pos2bed.pl ${ens_file}_noGLMT_chr.tss_collapse.txt > ${ens_file}_noGLMT_chr.tss_collapse.bed && rm -f ${ens_file}_noGLMT_chr.tss_collapse.txt
+fi
+
+# create 10,000kbp TSS regions
+if [ ! -f ${ens_file}_noGLMT_chr.tss_collapse_${region_size}.bed ]; then
+  cat ${ens_file}_noGLMT_chr.tss_collapse.bed | bedtools slop -g "$(basename $chrom_file)" -b "$region_size" > ${ens_file}_noGLMT_chr.tss_collapse_${region_size}.bed
+fi
+
+# collapse the peaks again 
+[ ! -f Ensembl_TSS.txt ] && mergePeaks ${ens_file}_noGLMT_chr.tss_collapse_${region_size}.bed > Ensembl_TSS.txt
+[ ! -f Ensembl_TSS.bed ] && pos2bed.pl Ensembl_TSS.txt > Ensembl_TSS.bed && rm -f Ensembl_TSS.txt
+
+
+```
+
+Check the number of peaks
+
+```{r, engine='bash', eval=TRUE}
+ensembl_bed="data/Ensembl/Ensembl_TSS.bed"
+wc -l $ensembl_bed
+```
+
+
+# Overlap GENCODE and Ensembl regions
+
+We can now overlap the Ensembl and GENCODE TSS region data sets to find the number of regions they have in common. Ideally, there should be a very large overlap. 
+
+```{r, engine='bash', eval=FALSE}
+# load some programs to be used; this updates the PATH with the corresponding entries
+module load homer/v4.6
+
+# path to the regions
+ens_file="Ensembl/Ensembl_TSS.bed"
+gen_file="Gencode/Gencode_TSS.bed"
+
+# set up a directory for the overlapping
+merge_dir="merged"
+mkdir -p "$merge_dir"
+cd "$merge_dir"
+
+# create symlinks to the files
+ln -s "../$ens_file" "Ensembl.bed"
+ln -s "../$gen_file" "Gencode.bed"
+
+# overlap them with HOMER
+mergePeaks *.bed -prefix mergepeaks -venn venn.txt
+```
+
+Now we can load the `venn.txt` file produced by HOMER into R and create a Venn diagram to visualize the overlap between the peak sets. 
+
+```{r makevenn, fig.height=8, fig.width=8}
+# ~~~~~ LOAD PACKAGES ~~~~~~~ #
+suppressPackageStartupMessages(library('VennDiagram'))
+suppressPackageStartupMessages(library('gridExtra'))
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+
+# custom function for creating the Venn diagram for two comparisons
+pair_peak_overlap_Venn <- function(SampleID, venn_table_file){
+    
+    # ~~~~~ PARSE THE VENN TABLE ~~~~~~~ #
+    # read in the venn text
+    venn_table_df<-read.table(venn_table_file,header = TRUE,sep = "\t",stringsAsFactors = FALSE,check.names = FALSE)
+    # venn_table_df
+    
+    # get the venn categories
+    venn_categories<-colnames(venn_table_df)[!colnames(venn_table_df) %in% c("Total","Name")] 
+    # cat("Venn categories are:\n"); venn_categories
+    
+    # venn_categories
+    num_categories<-length(venn_categories)
+    # cat("Num categories are:\n"); num_categories
+    
+    # make a summary table
+    venn_summary<-venn_table_df[!colnames(venn_table_df) %in% venn_categories]
+    # cat("Venn summary table is categories are:\n"); venn_summary
+    # venn_summary
+    
+    # write summary table
+    # write.table(venn_summary,file = "venn_summary.tsv",quote = FALSE,row.names = FALSE)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # 
+    
+    # ~~~~~ SET UP THE PLOT ~~~~~~~ #
+    # get the areas for the venn; add up all the overlaps that contain the given category 
+    
+    if (num_categories == 2) {
+        # PAIRWISE VENN
+        # cat("CREATING PAIR-WISE VENN DIAGRAM\n")
+        # area1
+        area_n1<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")"),
+                                       x = venn_summary$Name,perl = TRUE),][["Total"]])
+        
+        # area2
+        area_n2<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[2],")"),
+                                       x = venn_summary$Name,perl = TRUE),][["Total"]])
+        
+        # n12
+        area_n12<-sum(venn_summary[grep(pattern = paste0("(?=.*",venn_categories[1],")","(?=.*",venn_categories[2],")"),
+                                        x = venn_summary$Name,perl = TRUE),][["Total"]])
+        
+        venn <-draw.pairwise.venn(area1=area_n1,
+                                  area2=area_n2,
+                                  cross.area=area_n12,
+                                  category=gsub(pattern = ".bed",replacement = "",x = venn_categories),
+                                  fill=c('red','blue'),
+                                  alpha=0.3,
+                                  # cat.dist = 0.1,
+                                  cex=2,
+                                  cat.cex = 2,
+                                  margin = 0.1,
+                                  ind = FALSE)
+        
+        # pdf(plot_filepath,width = 8,height = 8)
+        # grid.arrange(gTree(children=venn), top=paste0(SampleID," Peak Overlap")) #, bottom="subtitle")
+        grid.arrange(gTree(children=venn), top=textGrob(paste0(SampleID," Peak Overlap"), gp=gpar(cex=2), vjust=3))
+        # top=textGrob("Total Data and Image", gp=gpar(cex=3), just="top") #  vjust=0.7
+        # dev.off()
+        
+        
+    } 
+}
+
+# the file produced by HOMER mergePeaks
+venn_file <- "data/merged/venn.txt"
+
+# create the plot
+pair_peak_overlap_Venn("", venn_file)
+
+```
+
+For reference, this is our hg19 chromosome sizes file:
+
+```{r, engine='bash', eval=FALSE}
+chrom_file="/ifs/home/kellys04/projects/Bioinformatics/data/hg19_chrom.sizes.txt"
+cat $chrom_file
+```
+
+```
+chrM   	16571
+chr1   	249250621
+chr2   	243199373
+chr3   	198022430
+chr4   	191154276
+chr5   	180915260
+chr6   	171115067
+chr7   	159138663
+chr8   	146364022
+chr9   	141213431
+chr10  	135534747
+chr11  	135006516
+chr12  	133851895
+chr13  	115169878
+chr14  	107349540
+chr15  	102531392
+chr16  	90354753
+chr17  	81195210
+chr18  	78077248
+chr19  	59128983
+chr20  	63025520
+chr21  	48129895
+chr22  	51304566
+chrX   	155270560
+chrY   	59373566
+```
+
+Check the number of base pairs covered by our regions
+
+```{r}
+
+gen_bed_file <- "/ifs/home/kellys04/projects/CarrollLab_Teena_ChIpSeq_2016-03-10/project_notes/manuscript_figures/gencode_tss_regions/data/Gencode/Gencode_TSS.bed"
+
+gen_df <-read.delim(gen_bed_file, sep = '\t', header = FALSE, comment.char = '#')
+
+head(gen_df)
+
+gen_df['Difference'] <- gen_df['V3'] - gen_df['V2']
+total_bp <- sum(gen_df[['Difference']])
+print(total_bp)
+```
+
+# Session Information
+
+```{r}
+system('uname -srv',intern=T)
+sessionInfo()
+```
+
+# References
