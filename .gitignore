@@ -1,3 +1,5 @@
-.Rproj.user/
-stevekm.github.io.Rproj
-.Rhistory
+_site
+.sass-cache
+.jekyll-metadata
+_site/*
+.DS_Store
