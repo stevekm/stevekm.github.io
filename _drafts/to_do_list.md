@@ -6,8 +6,10 @@ future posts
 - UCSC track creator  
 - look into hosting Jupyter notebooks ?  
 - HOMER multivenn and UpSetR plots example  
+- update the GENCODE TSS region page with new material 
+- combined alignment stats plot + number of peaks plot in ggplot2
 
-fix css  
-fix website theme
+[X]fix css  
+[X]fix website theme
  
 
