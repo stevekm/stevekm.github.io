@@ -1,0 +1,84 @@
+---
+title: "Galaxy Docker Setup Guide"
+author: "Stephen Kelly"
+date: "October 6, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Docker Installation
+
+For Ubuntu 16.04
+
+https://docs.docker.com/engine/installation/linux/ubuntulinux/
+
+```{r, engine='bash', eval=FALSE}
+# setup
+sudo apt-get update
+sudo apt-get install apt-transport-https ca-certificates
+sudo apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+sudo gedit /etc/apt/sources.list.d/docker.list
+# Remove any existing entries.
+# Add an entry for your Ubuntu operating system.
+# deb https://apt.dockerproject.org/repo ubuntu-xenial main
+sudo apt-get update
+sudo apt-get purge lxc-docker
+apt-cache policy docker-engine
+sudo apt-get update
+sudo apt-get install linux-image-extra-$(uname -r) linux-image-extra-virtual
+
+# install docker
+sudo apt-get update
+sudo apt-get install docker-engine
+
+# start docker
+sudo service docker start
+
+# verify
+sudo docker run hello-world
+
+```
+
+
+# Install Galaxy Docker
+
+```{r, engine='bash', eval=FALSE}
+service docker start
+sudo usermod -aG docker $(whoami)
+# log out & back in
+docker run -d -p 8080:80 -p 8021:21 -p 8022:22 bgruening/galaxy-stable
+# -p 8080:80 = host:container
+
+# navigate web browser to http://127.0.0.1:8080/
+```
+
+# Managing Galaxy Docker
+
+```{r, engine='bash', eval=FALSE}
+# check the running Dockers
+docker ps
+
+# see the available images
+docker images
+
+# stop docker
+docker stop <name>
+# docker stop tiny_swartz
+
+# set up the persistent storage location
+GALSTOR="/home/steve/galaxy_persistent_storage"
+mkdir -p "$GALSTOR"
+docker run -d -p 8080:80 -v $GALSTOR:/export/ bgruening/galaxy-stable
+
+# enter a Docker container 
+docker exec -it <container name> bash
+# docker exec -it mad_mahavira bash
+
+# restart Galaxy (from outside the Docker container)
+docker exec <container name> supervisorctl restart galaxy:
+# docker exec mad_mahavira supervisorctl restart galaxy:
+
+```
