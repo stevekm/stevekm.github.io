@@ -55,6 +55,8 @@ docker run -d -p 8080:80 -p 8021:21 -p 8022:22 bgruening/galaxy-stable
 # navigate web browser to http://127.0.0.1:8080/
 ```
 
+![Screenshot](Galaxy_Docker_screenshot.png)
+
 # Managing Galaxy Docker
 
 ```{r, engine='bash', eval=FALSE}
@@ -82,3 +84,4 @@ docker exec <container name> supervisorctl restart galaxy:
 # docker exec mad_mahavira supervisorctl restart galaxy:
 
 ```
+
