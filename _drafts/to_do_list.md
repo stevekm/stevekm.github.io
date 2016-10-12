@@ -11,5 +11,5 @@ future posts
 
 [X]fix css  
 [X]fix website theme
- 
+[ ] get header & footer overlay for each page 
 
