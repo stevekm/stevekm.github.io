@@ -1,0 +1,55 @@
+---
+output:
+  html_document:
+    css: styles.css
+---
+<script src="js/hideOutput.js"></script>
+
+```{r}
+# knitr::opts_chunk$set(echo = FALSE)
+# output: 
+#   html_document: 
+#     code_folding: hide
+
+# http://rmarkdown.rstudio.com/html_document_format.html#custom_css
+```
+
+<div class="fold o">
+```{r}
+print("This code chunk will be hidden")
+```
+</div>
+
+
+<div class="fold s">
+```{r}
+print("This code chunk will be hidden")
+```
+</div>
+
+
+<div class="fold s o">
+```{r}
+print("This code chunk will be hidden")
+```
+</div>
+
+
+# Source code {.tabset .tabset-pills .tabset-fade}
+
+## Hide Code
+
+## Show Code
+
+```{r, engine='bash'}
+echo "This code chunk will not be hidden"
+```
+
+```{r, engine='python'}
+print "Will this code chunk be hidden?"
+```
+
+```{r}
+system('uname -srv',intern=T)
+sessionInfo()
+```
