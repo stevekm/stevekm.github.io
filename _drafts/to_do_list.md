@@ -10,6 +10,6 @@ future posts
 - combined alignment stats plot + number of peaks plot in ggplot2
 
 [X]fix css  
-[X]fix website theme
- 
+[X]fix website theme  
+[ ] get header & footer overlay for each page 
 
